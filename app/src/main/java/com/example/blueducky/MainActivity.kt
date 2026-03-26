@@ -148,6 +148,13 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
         label = "execute_pulse"
     )
 
+    // ── Auto-register on startup ──────────────────────────────────────────────
+    LaunchedEffect(Unit) {
+        if (connectionState == HidConnectionState.IDLE) {
+            requireBtPermissions { viewModel.registerHid() }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────────
     Scaffold(
         topBar = {
@@ -344,6 +351,12 @@ fun EditorCard(
                 IconButton(onClick = onSaveClick) {
                     Icon(Icons.Default.Save, contentDescription = "Save", tint = DuckYellow)
                 }
+                IconButton(onClick = { 
+                    val converted = PayloadParser.rawTextToDuckyScript(text)
+                    onTextChange(converted)
+                }) {
+                    Icon(Icons.Default.TextFormat, contentDescription = "Convert Raw Text", tint = DuckYellow)
+                }
                 IconButton(onClick = { onTextChange("") }) {
                     Icon(Icons.Default.Delete, contentDescription = "Clear", tint = DuckError)
                 }
@@ -403,7 +416,12 @@ fun DevicePickerDialog(
         text = {
             if (devices.isEmpty()) {
                 Text(
-                    "No paired devices found.\nPair your phone with a host PC via Bluetooth Settings first.",
+                    "No paired devices found.\n\n" +
+                    "CRITICAL PAIRING RULE:\n" +
+                    "1. Close PC settings.\n" +
+                    "2. Tap 'Enable & Register Keyboard' HERE first.\n" +
+                    "3. ONLY AFTER the app says 'Registered', go pair your phone from PC Bluetooth settings.\n" +
+                    "If you pair first, Windows will reject the connection!",
                     color = DuckOnSurface,
                     fontSize = 14.sp
                 )

@@ -107,6 +107,7 @@ object PayloadParser {
         // Punctuation
         put(' ',  Pair(MOD_NONE,   0x2C.toByte()))
         put('\n', Pair(MOD_NONE,   0x28.toByte()))  // Enter
+        put('\t', Pair(MOD_NONE,   0x2B.toByte()))  // Tab
         put('-',  Pair(MOD_NONE,   0x2D.toByte())); put('_', Pair(MOD_LSHIFT, 0x2D.toByte()))
         put('=',  Pair(MOD_NONE,   0x2E.toByte())); put('+', Pair(MOD_LSHIFT, 0x2E.toByte()))
         put('[',  Pair(MOD_NONE,   0x2F.toByte())); put('{', Pair(MOD_LSHIFT, 0x2F.toByte()))
@@ -237,5 +238,33 @@ object PayloadParser {
         }
         val keyUp = ByteArray(8)  // all zeros = key release
         return listOf(keyDown, keyUp)
+    }
+
+    /**
+     * Helper to wrap raw text into valid DuckyScript.
+     * If the text already looks like DuckyScript, it returns it unmodified.
+     */
+    fun rawTextToDuckyScript(raw: String): String {
+        val duckyCommands = listOf("STRING ", "STRINGLN ", "DELAY ", "ENTER", "GUI ", "CTRL ", "ALT ", "SHIFT ", "REM ", "DEFAULTDELAY ")
+        val isLikelyScript = raw.lines().any { line -> 
+            val upper = line.trimStart().uppercase()
+            duckyCommands.any { upper.startsWith(it) || upper == it.trim() }
+        }
+        
+        // If it already contains DuckyScript commands, don't double convert it!
+        if (isLikelyScript) return raw 
+
+        val sb = java.lang.StringBuilder()
+        val lines = raw.lines()
+        for ((i, line) in lines.withIndex()) {
+            val processedLine = line.replace("\t", "    ") // Optional: expand tabs to spaces if preferred, but we support \t in STRING now. Let's keep \t.
+            if (line.isNotEmpty()) {
+                sb.append("STRING ").append(line).append("\n")
+            }
+            if (i < lines.size - 1) {
+                sb.append("ENTER\n")
+            }
+        }
+        return sb.toString().trimEnd()
     }
 }

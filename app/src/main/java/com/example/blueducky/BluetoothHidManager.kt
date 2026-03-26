@@ -8,6 +8,9 @@ import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -42,6 +45,16 @@ private val HID_KEYBOARD_DESCRIPTOR = byteArrayOf(
     0x75.toByte(), 0x08.toByte(),  //   Report Size (8)
     0x95.toByte(), 0x01.toByte(),  //   Report Count (1)
     0x81.toByte(), 0x01.toByte(),  //   Input (Constant) = reserved byte
+    // --- LEDs (Output Report) MUST HAVE THIS OR WINDOWS DROPS CONNECTION ---
+    0x05.toByte(), 0x08.toByte(),  //   Usage Page (LEDs)
+    0x19.toByte(), 0x01.toByte(),  //   Usage Minimum (1)
+    0x29.toByte(), 0x05.toByte(),  //   Usage Maximum (5)
+    0x75.toByte(), 0x01.toByte(),  //   Report Size (1)
+    0x95.toByte(), 0x05.toByte(),  //   Report Count (5)
+    0x91.toByte(), 0x02.toByte(),  //   Output (Data, Variable, Absolute)
+    0x75.toByte(), 0x03.toByte(),  //   Report Size (3)
+    0x95.toByte(), 0x01.toByte(),  //   Report Count (1)
+    0x91.toByte(), 0x01.toByte(),  //   Output (Constant)
     // --- Key Array (6 simultaneous keys) ---
     0x05.toByte(), 0x07.toByte(),  //   Usage Page (Key Codes)
     0x19.toByte(), 0x00.toByte(),  //   Usage Minimum (0)
@@ -98,6 +111,29 @@ class BluetoothHidManager(private val context: Context) {
         /* subclass */    BluetoothHidDevice.SUBCLASS1_KEYBOARD,
         /* descriptors */ HID_KEYBOARD_DESCRIPTOR
     )
+
+    // -------------------------------------------------------------------------
+    // Auto-Connect Receiver
+    // -------------------------------------------------------------------------
+    private var isReceiverRegistered = false
+
+    private val aclReceiver = object : BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == BluetoothDevice.ACTION_ACL_CONNECTED) {
+                @Suppress("DEPRECATION")
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                if (device != null && device.bondState == BluetoothDevice.BOND_BONDED) {
+                    val hid = hidDevice
+                    val state = _connectionState.value
+                    if (hid != null && (state == HidConnectionState.REGISTERED || state == HidConnectionState.DISCONNECTED)) {
+                        Log.i(TAG, "ACL connection detected to ${device.address}. Upgrading to HID…")
+                        hid.connect(device)
+                    }
+                }
+            }
+        }
+    }
 
     // -------------------------------------------------------------------------
     // HID Device Callback
@@ -162,6 +198,18 @@ class BluetoothHidManager(private val context: Context) {
                     mainHandler::post,
                     hidCallback
                 )
+                
+                // If already connected via Android BT settings, adopt the connection immediately
+                @SuppressLint("MissingPermission")
+                val alreadyConnected = proxy.connectedDevices
+                if (alreadyConnected.isNotEmpty()) {
+                    val device = alreadyConnected.first()
+                    connectedHost = device
+                    mainHandler.post {
+                        _connectionState.value = HidConnectionState.CONNECTED
+                        _statusMessage.value = "Connected to: ${device.name ?: device.address}"
+                    }
+                }
             }
         }
 
@@ -189,6 +237,12 @@ class BluetoothHidManager(private val context: Context) {
             return
         }
         adapter.getProfileProxy(context, profileListener, BluetoothProfile.HID_DEVICE)
+        
+        if (!isReceiverRegistered) {
+            val filter = IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED)
+            context.registerReceiver(aclReceiver, filter)
+            isReceiverRegistered = true
+        }
     }
 
     /**
@@ -196,6 +250,10 @@ class BluetoothHidManager(private val context: Context) {
      * Call this in [androidx.activity.ComponentActivity.onDestroy].
      */
     fun unregister() {
+        if (isReceiverRegistered) {
+            context.unregisterReceiver(aclReceiver)
+            isReceiverRegistered = false
+        }
         hidDevice?.unregisterApp()
         bluetoothAdapter?.closeProfileProxy(BluetoothProfile.HID_DEVICE, hidDevice)
         hidDevice = null
