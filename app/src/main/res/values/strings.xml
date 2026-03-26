@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">BlueDucky</string>
+    <string name="btn_connect">Connect Device</string>
+    <string name="btn_load">Load Payload</string>
+    <string name="btn_save">Save Payload</string>
+    <string name="btn_execute">Execute</string>
+    <string name="hint_editor">Enter or paste DuckyScript here…\n\nExamples:\nSTRING Hello World\nENTER\nDELAY 500\nGUI r\n</string>
+    <string name="status_idle">Status: Idle</string>
+    <string name="status_registered">Status: Registered</string>
+    <string name="status_connected">Status: Connected</string>
+    <string name="status_disconnected">Status: Disconnected</string>
+    <string name="status_executing">Status: Executing…</string>
+</resources>

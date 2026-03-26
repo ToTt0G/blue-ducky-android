@@ -1,0 +1,4 @@
+<resources>
+    <!-- Base application theme. Compose handles theming itself; this is just for the window background. -->
+    <style name="Theme.BlueDucky" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
