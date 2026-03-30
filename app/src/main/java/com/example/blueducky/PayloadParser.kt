@@ -82,8 +82,8 @@ object PayloadParser {
         "RGUI"    to MOD_RGUI,
     )
 
-    // US keyboard layout: char -> (modifier, keycode)
-    // modifier = 0x02 means SHIFT required
+    // SWEDISH keyboard layout: char -> (modifier, keycode)
+    // modifier = 0x02 means SHIFT required, 0x40 means AltGr required
     private val CHAR_MAP: Map<Char, Pair<Byte, Byte>> = buildMap {
         // Lowercase letters a-z (no modifier, keycodes 0x04-0x1D)
         for (c in 'a'..'z') {
@@ -93,32 +93,54 @@ object PayloadParser {
         for (c in 'A'..'Z') {
             put(c, Pair(MOD_LSHIFT, (0x04 + (c - 'A')).toByte()))
         }
+        
+        // Swedish specific letters
+        put('å', Pair(MOD_NONE, 0x2F.toByte())); put('Å', Pair(MOD_LSHIFT, 0x2F.toByte()))
+        put('ä', Pair(MOD_NONE, 0x34.toByte())); put('Ä', Pair(MOD_LSHIFT, 0x34.toByte()))
+        put('ö', Pair(MOD_NONE, 0x33.toByte())); put('Ö', Pair(MOD_LSHIFT, 0x33.toByte()))
+
         // Digits 1-9 (keycodes 0x1E-0x26), 0 = 0x27
+        // Swedish shift layout: !"#¤%&/()=
         put('1', Pair(MOD_NONE, 0x1E.toByte())); put('!', Pair(MOD_LSHIFT, 0x1E.toByte()))
-        put('2', Pair(MOD_NONE, 0x1F.toByte())); put('@', Pair(MOD_LSHIFT, 0x1F.toByte()))
-        put('3', Pair(MOD_NONE, 0x20.toByte())); put('#', Pair(MOD_LSHIFT, 0x20.toByte()))
-        put('4', Pair(MOD_NONE, 0x21.toByte())); put('$', Pair(MOD_LSHIFT, 0x21.toByte()))
-        put('5', Pair(MOD_NONE, 0x22.toByte())); put('%', Pair(MOD_LSHIFT, 0x22.toByte()))
-        put('6', Pair(MOD_NONE, 0x23.toByte())); put('^', Pair(MOD_LSHIFT, 0x23.toByte()))
-        put('7', Pair(MOD_NONE, 0x24.toByte())); put('&', Pair(MOD_LSHIFT, 0x24.toByte()))
-        put('8', Pair(MOD_NONE, 0x25.toByte())); put('*', Pair(MOD_LSHIFT, 0x25.toByte()))
-        put('9', Pair(MOD_NONE, 0x26.toByte())); put('(', Pair(MOD_LSHIFT, 0x26.toByte()))
-        put('0', Pair(MOD_NONE, 0x27.toByte())); put(')', Pair(MOD_LSHIFT, 0x27.toByte()))
-        // Punctuation
+        put('2', Pair(MOD_NONE, 0x1F.toByte())); put('"', Pair(MOD_LSHIFT, 0x1F.toByte())); put('@', Pair(MOD_RALT, 0x1F.toByte()))
+        put('3', Pair(MOD_NONE, 0x20.toByte())); put('#', Pair(MOD_LSHIFT, 0x20.toByte())); put('£', Pair(MOD_RALT, 0x20.toByte()))
+        put('4', Pair(MOD_NONE, 0x21.toByte())); put('¤', Pair(MOD_LSHIFT, 0x21.toByte())); put('$', Pair(MOD_RALT, 0x21.toByte()))
+        put('5', Pair(MOD_NONE, 0x22.toByte())); put('%', Pair(MOD_LSHIFT, 0x22.toByte())); put('€', Pair(MOD_RALT, 0x22.toByte()))
+        put('6', Pair(MOD_NONE, 0x23.toByte())); put('&', Pair(MOD_LSHIFT, 0x23.toByte()))
+        put('7', Pair(MOD_NONE, 0x24.toByte())); put('/', Pair(MOD_LSHIFT, 0x24.toByte())); put('{', Pair(MOD_RALT, 0x24.toByte()))
+        put('8', Pair(MOD_NONE, 0x25.toByte())); put('(', Pair(MOD_LSHIFT, 0x25.toByte())); put('[', Pair(MOD_RALT, 0x25.toByte()))
+        put('9', Pair(MOD_NONE, 0x26.toByte())); put(')', Pair(MOD_LSHIFT, 0x26.toByte())); put(']', Pair(MOD_RALT, 0x26.toByte()))
+        put('0', Pair(MOD_NONE, 0x27.toByte())); put('=', Pair(MOD_LSHIFT, 0x27.toByte())); put('}', Pair(MOD_RALT, 0x27.toByte()))
+
+        // Punctuation & other symbols
         put(' ',  Pair(MOD_NONE,   0x2C.toByte()))
         put('\n', Pair(MOD_NONE,   0x28.toByte()))  // Enter
         put('\t', Pair(MOD_NONE,   0x2B.toByte()))  // Tab
-        put('-',  Pair(MOD_NONE,   0x2D.toByte())); put('_', Pair(MOD_LSHIFT, 0x2D.toByte()))
-        put('=',  Pair(MOD_NONE,   0x2E.toByte())); put('+', Pair(MOD_LSHIFT, 0x2E.toByte()))
-        put('[',  Pair(MOD_NONE,   0x2F.toByte())); put('{', Pair(MOD_LSHIFT, 0x2F.toByte()))
-        put(']',  Pair(MOD_NONE,   0x30.toByte())); put('}', Pair(MOD_LSHIFT, 0x30.toByte()))
-        put('\\', Pair(MOD_NONE,   0x31.toByte())); put('|', Pair(MOD_LSHIFT, 0x31.toByte()))
-        put(';',  Pair(MOD_NONE,   0x33.toByte())); put(':', Pair(MOD_LSHIFT, 0x33.toByte()))
-        put('\'', Pair(MOD_NONE,   0x34.toByte())); put('"', Pair(MOD_LSHIFT, 0x34.toByte()))
-        put('`',  Pair(MOD_NONE,   0x35.toByte())); put('~', Pair(MOD_LSHIFT, 0x35.toByte()))
-        put(',',  Pair(MOD_NONE,   0x36.toByte())); put('<', Pair(MOD_LSHIFT, 0x36.toByte()))
-        put('.',  Pair(MOD_NONE,   0x37.toByte())); put('>', Pair(MOD_LSHIFT, 0x37.toByte()))
-        put('/',  Pair(MOD_NONE,   0x38.toByte())); put('?', Pair(MOD_LSHIFT, 0x38.toByte()))
+
+        // Key right of 0: + ? \
+        put('+',  Pair(MOD_NONE,   0x2D.toByte())); put('?', Pair(MOD_LSHIFT, 0x2D.toByte())); put('\\', Pair(MOD_RALT, 0x2D.toByte()))
+        
+        // Key right of +: ´ `
+        put('´',  Pair(MOD_NONE,   0x2E.toByte())); put('`', Pair(MOD_LSHIFT, 0x2E.toByte()))
+        
+        // Key right of å: ¨ ^ ~
+        put('¨',  Pair(MOD_NONE,   0x30.toByte())); put('^', Pair(MOD_LSHIFT, 0x30.toByte())); put('~', Pair(MOD_RALT, 0x30.toByte()))
+
+        // Key right of ä: ' *
+        put('\'', Pair(MOD_NONE,   0x31.toByte())); put('*', Pair(MOD_LSHIFT, 0x31.toByte()))
+        
+        // Key right of M: , ;
+        put(',',  Pair(MOD_NONE,   0x36.toByte())); put(';', Pair(MOD_LSHIFT, 0x36.toByte()))
+        // Key right of ,: . :
+        put('.',  Pair(MOD_NONE,   0x37.toByte())); put(':', Pair(MOD_LSHIFT, 0x37.toByte()))
+        // Key right of .: - _
+        put('-',  Pair(MOD_NONE,   0x38.toByte())); put('_', Pair(MOD_LSHIFT, 0x38.toByte()))
+
+        // Key left of 1: § ½
+        put('§',  Pair(MOD_NONE,   0x35.toByte())); put('½', Pair(MOD_LSHIFT, 0x35.toByte()))
+        
+        // Key left of Z: < > |
+        put('<',  Pair(MOD_NONE,   0x64.toByte())); put('>', Pair(MOD_LSHIFT, 0x64.toByte())); put('|', Pair(MOD_RALT, 0x64.toByte()))
     }
 
     /** Represents a single action derived from a parsed line */
