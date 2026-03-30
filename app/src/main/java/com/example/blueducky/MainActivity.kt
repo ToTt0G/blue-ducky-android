@@ -287,8 +287,6 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = DuckYellow)
                         ) {
-                            Icon(Icons.Default.Pause, contentDescription = null, tint = Color(0xFF1A1A00))
-                            Spacer(Modifier.width(8.dp))
                             Text("Pause", color = Color(0xFF1A1A00), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                         }
                     } else if (playbackState == MainViewModel.PlaybackState.PAUSED) {
@@ -310,8 +308,6 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = DuckError)
                     ) {
-                        Icon(Icons.Default.Stop, contentDescription = null, tint = Color.White)
-                        Spacer(Modifier.width(8.dp))
                         Text("Stop", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
