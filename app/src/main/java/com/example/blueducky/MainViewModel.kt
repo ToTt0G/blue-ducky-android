@@ -44,6 +44,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getPairedDevices(): List<BluetoothDevice> =
         hidManager.getPairedDevices().toList()
 
+    val scannedDevices: StateFlow<Set<BluetoothDevice>> = hidManager.scannedDevices
+
+    fun startDiscovery() {
+        hidManager.startDiscovery()
+    }
+
     fun executePayload(interKeyDelayMs: Long = 30L) {
         val script = _scriptText.value
         if (script.isBlank()) return

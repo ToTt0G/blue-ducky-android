@@ -14,6 +14,7 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,6 +102,9 @@ class BluetoothHidManager(private val context: Context) {
     private val _statusMessage = MutableStateFlow("Tap 'Connect' to begin.")
     val statusMessage: StateFlow<String> = _statusMessage.asStateFlow()
 
+    private val _scannedDevices = MutableStateFlow<Set<BluetoothDevice>>(emptySet())
+    val scannedDevices: StateFlow<Set<BluetoothDevice>> = _scannedDevices.asStateFlow()
+
     // -------------------------------------------------------------------------
     // SDP settings — Presents this device to paired hosts as a standard keyboard
     // -------------------------------------------------------------------------
@@ -120,7 +124,8 @@ class BluetoothHidManager(private val context: Context) {
     private val aclReceiver = object : BroadcastReceiver() {
         @SuppressLint("MissingPermission")
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == BluetoothDevice.ACTION_ACL_CONNECTED) {
+            val action = intent?.action
+            if (action == BluetoothDevice.ACTION_ACL_CONNECTED) {
                 @Suppress("DEPRECATION")
                 val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                 if (device != null && device.bondState == BluetoothDevice.BOND_BONDED) {
@@ -131,6 +136,16 @@ class BluetoothHidManager(private val context: Context) {
                         hid.connect(device)
                     }
                 }
+            } else if (action == BluetoothDevice.ACTION_FOUND) {
+                @Suppress("DEPRECATION")
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                if (device != null) {
+                    _scannedDevices.value = _scannedDevices.value + device
+                }
+            } else if (action == BluetoothAdapter.ACTION_DISCOVERY_STARTED) {
+                _statusMessage.value = "Scanning for devices..."
+            } else if (action == BluetoothAdapter.ACTION_DISCOVERY_FINISHED) {
+                _statusMessage.value = if (_scannedDevices.value.isEmpty()) "Scan finished. No devices found." else "Scan finished."
             }
         }
     }
@@ -195,7 +210,7 @@ class BluetoothHidManager(private val context: Context) {
                     sdpSettings,
                     null,   // QoS settings (null = default)
                     null,   // QoS settings (null = default)
-                    mainHandler::post,
+                    ContextCompat.getMainExecutor(context),
                     hidCallback
                 )
                 
@@ -239,7 +254,12 @@ class BluetoothHidManager(private val context: Context) {
         adapter.getProfileProxy(context, profileListener, BluetoothProfile.HID_DEVICE)
         
         if (!isReceiverRegistered) {
-            val filter = IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED)
+            val filter = IntentFilter().apply {
+                addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+                addAction(BluetoothDevice.ACTION_FOUND)
+                addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
+                addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+            }
             context.registerReceiver(aclReceiver, filter)
             isReceiverRegistered = true
         }
@@ -271,7 +291,25 @@ class BluetoothHidManager(private val context: Context) {
             return
         }
         _statusMessage.value = "Connecting to ${device.name ?: device.address}…"
+        // If we connect, we should probably stop discovery if running
+        bluetoothAdapter?.takeIf { it.isDiscovering }?.cancelDiscovery()
         hid.connect(device)
+    }
+
+    /**
+     * Start discovering unpaired BT devices nearby.
+     * Note: Requires location permission and location services to be enabled!
+     */
+    fun startDiscovery() {
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+            _statusMessage.value = "Bluetooth is disabled."
+            return
+        }
+        if (bluetoothAdapter.isDiscovering) {
+            bluetoothAdapter.cancelDiscovery()
+        }
+        _scannedDevices.value = emptySet()
+        bluetoothAdapter.startDiscovery()
     }
 
     /**

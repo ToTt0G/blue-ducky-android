@@ -73,6 +73,7 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
     val statusMessage   by viewModel.statusMessage.collectAsState()
     val scriptText      by viewModel.scriptText.collectAsState()
     val isExecuting     by viewModel.isExecuting.collectAsState()
+    val scannedDevices  by viewModel.scannedDevices.collectAsState()
 
     // ── Device picker dialog state ───────────────────────────────────────────
     var showDevicePicker by remember { mutableStateOf(false) }
@@ -128,12 +129,16 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
             listOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_ADVERTISE
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
             )
         } else {
             listOf(
                 Manifest.permission.BLUETOOTH,
-                Manifest.permission.BLUETOOTH_ADMIN
+                Manifest.permission.BLUETOOTH_ADMIN,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
             )
         }
         val missing = needed.filter {
@@ -274,10 +279,16 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
     // ── Device picker bottom sheet ───────────────────────────────────────────
     if (showDevicePicker) {
         DevicePickerDialog(
-            devices  = pairedDevices,
+            pairedDevices  = pairedDevices,
+            scannedDevices = scannedDevices.toList(),
             onSelect = { device ->
                 viewModel.connectToDevice(device)
                 showDevicePicker = false
+            },
+            onScan = {
+                requireBtPermissions {
+                    viewModel.startDiscovery()
+                }
             },
             onDismiss = { showDevicePicker = false }
         )
@@ -403,49 +414,53 @@ fun EditorCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevicePickerDialog(
-    devices: List<BluetoothDevice>,
+    pairedDevices: List<BluetoothDevice>,
+    scannedDevices: List<BluetoothDevice>,
     onSelect: (BluetoothDevice) -> Unit,
+    onScan: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor   = DuckSurface,
         title = {
-            Text("Select Paired Device", color = DuckYellow, fontWeight = FontWeight.Bold)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Select Host Device", color = DuckYellow, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                IconButton(onClick = onScan) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Scan", tint = DuckYellow)
+                }
+            }
         },
         text = {
-            if (devices.isEmpty()) {
-                Text(
-                    "No paired devices found.\n\n" +
-                    "CRITICAL PAIRING RULE:\n" +
-                    "1. Close PC settings.\n" +
-                    "2. Tap 'Enable & Register Keyboard' HERE first.\n" +
-                    "3. ONLY AFTER the app says 'Registered', go pair your phone from PC Bluetooth settings.\n" +
-                    "If you pair first, Windows will reject the connection!",
-                    color = DuckOnSurface,
-                    fontSize = 14.sp
-                )
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(devices) { device ->
-                        @SuppressLint("MissingPermission")
-                        val name = try { device.name ?: device.address } catch (_: SecurityException) { device.address }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(DuckSurface2)
-                                .clickable { onSelect(device) }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Devices, contentDescription = null, tint = DuckYellow, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Column {
-                                Text(name, color = DuckOnSurface, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                Text(device.address, color = DuckOnSurface.copy(alpha = 0.5f), fontSize = 11.sp)
-                            }
-                        }
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (pairedDevices.isEmpty() && scannedDevices.isEmpty()) {
+                    item {
+                        Text(
+                            "No paired devices found.\n\n" +
+                            "Tap the refresh icon to scan for nearby devices.\n" +
+                            "On Windows, make sure Bluetooth settings are open and discoverable.",
+                            color = DuckOnSurface,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                
+                if (pairedDevices.isNotEmpty()) {
+                    item {
+                        Text("Paired Devices", color = DuckOnSurface.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                    }
+                    items(pairedDevices) { device ->
+                        DeviceItemRow(device = device, onSelect = onSelect, iconTint = DuckGreen)
+                    }
+                }
+                
+                if (scannedDevices.isNotEmpty()) {
+                    item {
+                        Text("Scanned Devices", color = DuckOnSurface.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                    }
+                    items(scannedDevices) { device ->
+                        // Filter out empty name or randomly rotated MACs to keep list clean, optional but nice
+                        DeviceItemRow(device = device, onSelect = onSelect, iconTint = DuckYellow)
                     }
                 }
             }
@@ -456,4 +471,26 @@ fun DevicePickerDialog(
             }
         }
     )
+}
+
+@Composable
+fun DeviceItemRow(device: BluetoothDevice, onSelect: (BluetoothDevice) -> Unit, iconTint: Color) {
+    @SuppressLint("MissingPermission")
+    val name = try { device.name ?: device.address } catch (_: SecurityException) { device.address }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(DuckSurface2)
+            .clickable { onSelect(device) }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Devices, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(name, color = DuckOnSurface, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            Text(device.address, color = DuckOnSurface.copy(alpha = 0.5f), fontSize = 11.sp)
+        }
+    }
 }
