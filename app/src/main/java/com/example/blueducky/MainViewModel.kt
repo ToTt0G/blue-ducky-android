@@ -50,7 +50,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         hidManager.startDiscovery()
     }
 
-    fun executePayload(interKeyDelayMs: Long = 30L) {
+    fun executePayload(interKeyDelayMs: Long = 45L) {
         val script = _scriptText.value
         if (script.isBlank()) return
 
