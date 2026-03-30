@@ -17,7 +17,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required to fetch all tags for versioning
+          fetch-depth: 0 # Required to fetch all commits
+          fetch-tags: true # Crucial for calculating previous version tags
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
