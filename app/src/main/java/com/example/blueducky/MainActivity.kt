@@ -72,7 +72,8 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
     val connectionState by viewModel.connectionState.collectAsState()
     val statusMessage   by viewModel.statusMessage.collectAsState()
     val scriptText      by viewModel.scriptText.collectAsState()
-    val isExecuting     by viewModel.isExecuting.collectAsState()
+    val playbackState   by viewModel.playbackState.collectAsState()
+    val isExecuting     = playbackState != MainViewModel.PlaybackState.IDLE
     val scannedDevices  by viewModel.scannedDevices.collectAsState()
 
     // ── Device picker dialog state ───────────────────────────────────────────
@@ -245,32 +246,74 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
                 modifier      = Modifier.weight(1f)
             )
 
-            // ── Execute button ───────────────────────────────────────────────
-            Button(
-                onClick = { viewModel.executePayload() },
-                enabled = !isExecuting && connectionState == HidConnectionState.CONNECTED,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .graphicsLayer { scaleX = executePulse; scaleY = executePulse },
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = DuckGreen,
-                    disabledContainerColor = DuckGreen.copy(alpha = 0.3f)
-                )
+            // ── Execute control ──────────────────────────────────────────────
+            AnimatedVisibility(
+                visible = connectionState == HidConnectionState.CONNECTED && playbackState == MainViewModel.PlaybackState.IDLE,
+                enter = expandVertically(),
+                exit = shrinkVertically()
             ) {
-                if (isExecuting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color(0xFF003314),
-                        strokeWidth = 2.dp
+                Button(
+                    onClick = { viewModel.executePayload() },
+                    enabled = !isExecuting && connectionState == HidConnectionState.CONNECTED,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .graphicsLayer { scaleX = executePulse; scaleY = executePulse },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DuckGreen,
+                        disabledContainerColor = DuckGreen.copy(alpha = 0.3f)
                     )
-                    Spacer(Modifier.width(10.dp))
-                    Text("Executing…", color = Color(0xFF003314), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                } else {
-                    Icon(Icons.Default.Send, contentDescription = null, tint = Color(0xFF003314))
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color(0xFF003314))
                     Spacer(Modifier.width(8.dp))
                     Text("Execute Payload", color = Color(0xFF003314), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
+
+            AnimatedVisibility(
+                visible = connectionState == HidConnectionState.CONNECTED && playbackState != MainViewModel.PlaybackState.IDLE,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (playbackState == MainViewModel.PlaybackState.RUNNING) {
+                        Button(
+                            onClick = { viewModel.pauseExecution() },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DuckYellow)
+                        ) {
+                            Icon(Icons.Default.Pause, contentDescription = null, tint = Color(0xFF1A1A00))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Pause", color = Color(0xFF1A1A00), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    } else if (playbackState == MainViewModel.PlaybackState.PAUSED) {
+                        Button(
+                            onClick = { viewModel.executePayload() },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DuckGreen)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF003314))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Resume", color = Color(0xFF003314), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
+
+                    Button(
+                        onClick = { viewModel.stopExecution() },
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DuckError)
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Stop", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                 }
             }
         }

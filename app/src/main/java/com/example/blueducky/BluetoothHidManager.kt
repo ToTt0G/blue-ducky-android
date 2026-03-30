@@ -313,40 +313,22 @@ class BluetoothHidManager(private val context: Context) {
     }
 
     /**
-     * Send a sequence of raw 8-byte HID keyboard reports to the connected host.
-     *
-     * @param reports   Ordered list of 8-byte arrays (key-down + key-up pairs from [PayloadParser]).
-     * @param delayMs   Inter-report delay in milliseconds (default 20 ms feels natural).
-     * @param onDone    Callback invoked on the main thread when all reports have been sent.
+     * Send a single 8-byte HID keyboard report to the connected host.
      */
-    fun sendKeyReports(
-        reports: List<ByteArray>,
-        delayMs: Long = 20L,
-        onDone: () -> Unit = {}
-    ) {
+    fun sendSingleReport(report: ByteArray): Boolean {
         val hid = hidDevice
         val host = connectedHost
-        if (hid == null || host == null) {
-            _statusMessage.value = "No host connected. Cannot send reports."
-            return
+        if (hid == null || host == null) return false
+        val success = hid.sendReport(host, KEYBOARD_REPORT_ID.toInt(), report)
+        if (!success) {
+            Log.w(TAG, "sendReport failed for report: ${report.toHex()}")
         }
+        return success
+    }
 
-        _statusMessage.value = "Executing payload…"
-
-        // Run on a background thread to avoid blocking the UI, but send via handler
-        Thread {
-            for (report in reports) {
-                val success = hid.sendReport(host, KEYBOARD_REPORT_ID.toInt(), report)
-                if (!success) {
-                    Log.w(TAG, "sendReport failed for report: ${report.toHex()}")
-                }
-                Thread.sleep(delayMs)
-            }
-            mainHandler.post {
-                _statusMessage.value = "Payload executed successfully."
-                onDone()
-            }
-        }.start()
+    /** Set a UI status message manually from ViewModel. */
+    fun setStatusMessage(msg: String) {
+        _statusMessage.value = msg
     }
 
     /** Convenience: is a host currently connected? */

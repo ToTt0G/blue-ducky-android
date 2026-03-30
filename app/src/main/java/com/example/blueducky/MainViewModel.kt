@@ -21,9 +21,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _scriptText = MutableStateFlow("")
     val scriptText: StateFlow<String> = _scriptText.asStateFlow()
 
-    // Whether the payload is currently being sent
-    private val _isExecuting = MutableStateFlow(false)
-    val isExecuting: StateFlow<Boolean> = _isExecuting.asStateFlow()
+    enum class PlaybackState { IDLE, RUNNING, PAUSED }
+    private val _playbackState = MutableStateFlow(PlaybackState.IDLE)
+    val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+
+    private var executionJob: kotlinx.coroutines.Job? = null
+    private var currentActions: List<PayloadParser.Action> = emptyList()
+    private var currentActionIndex = 0
 
     // Delegate status/connection state from the manager
     val connectionState = hidManager.connectionState
@@ -51,38 +55,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun executePayload(interKeyDelayMs: Long = 45L) {
-        val script = _scriptText.value
-        if (script.isBlank()) return
+        if (_playbackState.value == PlaybackState.RUNNING) return
 
-        viewModelScope.launch {
-            _isExecuting.value = true
-            val actions = PayloadParser.parse(script)
-            val reports = mutableListOf<ByteArray>()
+        if (_playbackState.value == PlaybackState.IDLE) {
+            val script = _scriptText.value
+            if (script.isBlank()) return
+            currentActions = PayloadParser.parse(script)
+            currentActionIndex = 0
+            hidManager.setStatusMessage("Executing payload…")
+        } else if (_playbackState.value == PlaybackState.PAUSED) {
+            hidManager.setStatusMessage("Resuming payload…")
+        }
 
-            for (action in actions) {
+        _playbackState.value = PlaybackState.RUNNING
+
+        executionJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            while (currentActionIndex < currentActions.size && _playbackState.value == PlaybackState.RUNNING) {
+                val action = currentActions[currentActionIndex]
                 when (action) {
                     is PayloadParser.Action.KeyPress -> {
-                        reports.addAll(PayloadParser.toHidReports(action))
+                        val reports = PayloadParser.toHidReports(action)
+                        for (report in reports) {
+                            hidManager.sendSingleReport(report)
+                            kotlinx.coroutines.delay(interKeyDelayMs)
+                        }
                     }
                     is PayloadParser.Action.Delay -> {
-                        // Insert sentinel "delay" reports: we piggyback the delay
-                        // value into the report list as a tagged null entry handled
-                        // inline by BluetoothHidManager. Here we use a simple
-                        // approach: flush current reports, then sleep.
-                        // For cleanliness we pass the entire report list including
-                        // embedded delays to a helper that sequences them.
-                        // (Simplified: merge delay into the per-char inter-key delay.)
+                        kotlinx.coroutines.delay(action.milliseconds)
                     }
-                    is PayloadParser.Action.DefaultDelay -> { /* handled by parser */ }
+                    is PayloadParser.Action.DefaultDelay -> { }
                 }
+                currentActionIndex++
             }
 
-            hidManager.sendKeyReports(
-                reports = reports,
-                delayMs = interKeyDelayMs,
-                onDone  = { _isExecuting.value = false }
-            )
+            if (currentActionIndex >= currentActions.size) {
+                _playbackState.value = PlaybackState.IDLE
+                hidManager.setStatusMessage("Payload executed successfully.")
+                currentActionIndex = 0
+            }
         }
+    }
+
+    fun pauseExecution() {
+        if (_playbackState.value == PlaybackState.RUNNING) {
+            _playbackState.value = PlaybackState.PAUSED
+            executionJob?.cancel()
+            hidManager.sendSingleReport(ByteArray(8)) // Release any stuck keys
+            hidManager.setStatusMessage("Execution paused.")
+        }
+    }
+
+    fun stopExecution() {
+        _playbackState.value = PlaybackState.IDLE
+        executionJob?.cancel()
+        currentActionIndex = 0
+        hidManager.sendSingleReport(ByteArray(8)) // Release any stuck keys
+        hidManager.setStatusMessage("Execution stopped.")
     }
 
     override fun onCleared() {
