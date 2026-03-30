@@ -265,7 +265,7 @@ fun BlueDuckyApp(viewModel: MainViewModel) {
                         disabledContainerColor = DuckGreen.copy(alpha = 0.3f)
                     )
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color(0xFF003314))
+                    Icon(Icons.Default.Send, contentDescription = null, tint = Color(0xFF003314))
                     Spacer(Modifier.width(8.dp))
                     Text("Execute Payload", color = Color(0xFF003314), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
